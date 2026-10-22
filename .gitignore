@@ -1,0 +1,5 @@
+node_modules
+client/dist
+.playwright-mcp
+*.log
+shot-*.png

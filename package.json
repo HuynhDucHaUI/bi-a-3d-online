@@ -1,0 +1,32 @@
+{
+  "name": "bi-a-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Game bi-a 8 bi 3D chơi online 1 đấu 1",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:client": "vite --config client/vite.config.ts",
+    "build": "vite build --config client/vite.config.ts",
+    "start": "tsx server/src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.186.0",
+    "concurrently": "^10.0.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

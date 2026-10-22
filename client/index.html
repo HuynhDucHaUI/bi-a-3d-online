@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1210" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23111'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23fff'/%3E%3Ctext x='16' y='20' font-size='10' font-weight='bold' text-anchor='middle' fill='%23111'%3E8%3C/text%3E%3C/svg%3E" />
+  <title>Bi-a 3D Online</title>
+  <style>
+    :root {
+      --bg: #0a1210;
+      --panel: rgba(12, 22, 18, 0.86);
+      --panel-solid: #0f1c17;
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #eef3ef;
+      --muted: #9db3a8;
+      --accent: #f2c14e;
+      --accent-ink: #231a00;
+      --green: #2fbf71;
+      --red: #ef5b5b;
+      --radius: 14px;
+      --font: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; touch-action: none; user-select: none; }
+    canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+    [hidden] { display: none !important; }
+    button { font: inherit; color: inherit; cursor: pointer; border: 0; }
+    .btn { background: rgba(255,255,255,0.09); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; font-weight: 600; transition: background .15s, transform .05s; }
+    .btn:hover { background: rgba(255,255,255,0.16); }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+    .btn.primary:hover { background: #ffd36b; }
+    .btn.small { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    input[type=text] { font: inherit; color: var(--text); background: rgba(0,0,0,0.35); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; width: 100%; outline: none; user-select: text; }
+    input[type=text]:focus { border-color: var(--accent); }
+
+    /* ---------- Sảnh ---------- */
+    #lobby { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background:
+      radial-gradient(1200px 700px at 50% 20%, rgba(34,120,76,0.35), transparent 70%), linear-gradient(#0a1210, #060b09); overflow-y: auto; touch-action: pan-y; }
+    .card { width: min(460px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 26px; backdrop-filter: blur(10px); box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+    .card h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: .5px; }
+    .card h1 span { color: var(--accent); }
+    .card p.sub { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+    .row { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+    .row > * { flex: 1; }
+    .row > .fixed { flex: none; }
+    .divider { height: 1px; background: var(--line); margin: 20px 0; }
+    label.check { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+    #lobbyError { color: var(--red); font-size: 13px; min-height: 18px; margin-top: 10px; }
+    .howto { margin-top: 16px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+    .howto b { color: var(--text); }
+    #codeInput { text-transform: uppercase; letter-spacing: 4px; text-align: center; font-weight: 700; }
+
+    /* ---------- HUD ---------- */
+    #hud { position: fixed; inset: 0; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    #hud > * { pointer-events: auto; }
+    #topbar { position: absolute; top: 10px; left: 10px; right: 10px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: start; pointer-events: none; }
+    .pcard { display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; min-width: 0; max-width: 340px; transition: box-shadow .2s, border-color .2s; pointer-events: auto; }
+    .pcard.right { justify-self: end; flex-direction: row-reverse; text-align: right; }
+    .pcard.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 22px rgba(242,193,78,.35); }
+    .pcard.off { opacity: .6; }
+    .avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: linear-gradient(135deg,#2a5d44,#143326); border: 2px solid rgba(255,255,255,.25); flex: none; }
+    .pcard .info { min-width: 0; }
+    .pname { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+    .pgroup { font-size: 12px; color: var(--muted); }
+    .score { font-size: 12px; color: var(--accent); font-weight: 700; margin-left: 6px; }
+    .tray { display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap; }
+    .pcard.right .tray { justify-content: flex-end; }
+    .mini { width: 17px; height: 17px; border-radius: 50%; font-size: 9px; font-weight: 800; display: grid; place-items: center; color: #111; border: 1px solid rgba(0,0,0,.4); position: relative; overflow: hidden; }
+    .mini span { position: relative; z-index: 1; background: #f6f4ec; border-radius: 50%; width: 10px; height: 10px; line-height: 10px; text-align: center; font-size: 7px; }
+    .mini.stripe::before { content: ""; position: absolute; left: 0; right: 0; top: 25%; bottom: 25%; background: var(--c); }
+    .mini.stripe { background: #f6f4ec; }
+    .mini.in { opacity: .22; filter: grayscale(.6); }
+    #center { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: auto; }
+    #centerRow { display: flex; gap: 8px; align-items: center; }
+    #viewSeg { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+    #timer { min-width: 64px; text-align: center; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px; }
+    #timer.low { color: var(--red); border-color: var(--red); animation: pulse .8s infinite; }
+    @keyframes pulse { 50% { background: rgba(239,91,91,.25); } }
+    #roomTag { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; cursor: pointer; }
+    #msgLine { position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%); max-width: min(64vw, 640px); text-align: center; background: rgba(10,18,14,.75); border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; font-size: 13px; pointer-events: none; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #banner { position: absolute; top: 28%; left: 50%; transform: translate(-50%, -20px); max-width: 90vw; text-align: center; padding: 14px 28px; font-size: 22px; font-weight: 800; border-radius: 16px; background: rgba(10,18,14,.88); border: 2px solid var(--accent); opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
+    #banner.show { opacity: 1; transform: translate(-50%, 0); }
+    #banner.bad { border-color: var(--red); }
+    #hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: var(--text); background: var(--panel); border: 1px solid var(--line); padding: 5px 14px; border-radius: 999px; pointer-events: none; text-align: center; max-width: min(64vw, 680px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #spinBig { position: fixed; z-index: 25; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+    #spinBigBall { width: 170px; height: 170px; border-radius: 50%; position: relative; pointer-events: auto; cursor: crosshair; touch-action: none;
+      background: radial-gradient(circle at 35% 30%, #fff, #dcd8c9 65%, #b9b5a6); border: 3px solid rgba(0,0,0,.55); box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+    #spinBigBall::before, #spinBigBall::after { content: ""; position: absolute; background: rgba(0,0,0,.18); }
+    #spinBigBall::before { left: 50%; top: 10px; bottom: 10px; width: 1px; }
+    #spinBigBall::after { top: 50%; left: 10px; right: 10px; height: 1px; }
+    #spinBigDot { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--red); border: 3px solid #fff; transform: translate(-50%, -50%); left: 50%; top: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.6); pointer-events: none; }
+    #spinBigText { font-weight: 800; font-size: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
+    #powerTip { position: fixed; z-index: 30; transform: translate(18px, -50%); pointer-events: none; font-weight: 800; font-size: 14px; padding: 5px 10px; border-radius: 8px; color: #111; white-space: nowrap;
+      background: linear-gradient(90deg, #2fbf71, #f2c14e calc(var(--p) * 100%), #ef5b5b); box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+    #help { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.5); z-index: 15; padding: 16px; }
+    #help .card { text-align: left; max-height: calc(100vh - 32px); overflow-y: auto; touch-action: pan-y; }
+    @media (max-height: 640px) { #help .card { padding: 16px 18px; } #help h2 { margin-bottom: 8px; } .steps { gap: 8px; margin-bottom: 12px; } .step span { font-size: 12px; } }
+    #help h2 { margin: 0 0 14px; }
+    .steps { display: grid; gap: 12px; margin-bottom: 18px; }
+    .step { display: flex; gap: 12px; align-items: flex-start; }
+    .step .ico { flex: none; width: 36px; height: 36px; border-radius: 10px; background: rgba(242,193,78,.15); border: 1px solid var(--accent); display: grid; place-items: center; font-size: 18px; }
+    .step b { display: block; margin-bottom: 2px; }
+    .step span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+    kbd { background: rgba(255,255,255,.1); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-size: 12px; font-family: inherit; color: var(--text); }
+
+    /* giữa mép trái: nằm trên băng ngắn của bàn (không có lỗ) nên không che lỗ nào */
+    #leftPanel { position: absolute; left: 12px; top: 54%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+    #spinBox { padding: 8px; }
+    #spinWrap { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+    #spin { width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d9d6c8 70%); position: relative; cursor: crosshair; touch-action: none; border: 3px solid #333; }
+    #spin::before, #spin::after { content: ""; position: absolute; background: rgba(0,0,0,.2); }
+    #spin::before { left: 50%; top: 6px; bottom: 6px; width: 1px; }
+    #spin::after { top: 50%; left: 6px; right: 6px; height: 1px; }
+    #spinDot { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--red); border: 2px solid #fff; transform: translate(-50%, -50%); left: 50%; top: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.5); pointer-events: none; }
+    #spinLabel { font-size: 11px; color: var(--muted); line-height: 1.3; text-align: center; max-width: 76px; }
+    .seg { display: flex; gap: 4px; }
+    .seg .btn { padding: 6px 9px; font-size: 12px; }
+    .seg .btn.on { background: var(--accent); color: var(--accent-ink); }
+
+    #power { position: absolute; right: 14px; top: 54%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px; }
+    #powerTrack { width: 34px; height: min(52vh, 360px); border-radius: 17px; background: linear-gradient(to bottom, #2fbf71, #f2c14e 55%, #ef5b5b); position: relative; touch-action: none; cursor: grab; border: 2px solid rgba(255,255,255,.35); overflow: hidden; }
+    #powerCover { position: absolute; left: 0; right: 0; top: 0; background: rgba(8,14,11,.82); }
+    #powerHandle { position: absolute; left: -2px; right: -2px; height: 12px; border-radius: 6px; background: #fff; border: 2px solid #222; top: 0; transform: translateY(-50%); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+    #powerVal { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 40px; text-align: center; }
+    #power.disabled { opacity: .35; pointer-events: none; }
+    #powerTitle { font-size: 11px; color: var(--muted); }
+
+    #pocketBtns { position: fixed; inset: 0; pointer-events: none; }
+    .pbtn { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: rgba(242,193,78,.25); border: 2px solid var(--accent); color: var(--accent); font-weight: 800; pointer-events: auto; display: grid; place-items: center; cursor: pointer; animation: pulse2 1.2s infinite; }
+    .pbtn.sel { background: var(--accent); color: var(--accent-ink); animation: none; }
+    @keyframes pulse2 { 50% { transform: scale(1.12); background: rgba(242,193,78,.45); } }
+
+    #centerRow2 { display: flex; gap: 4px; align-items: center; }
+    #centerRow2 .btn.small { padding: 3px 8px; font-size: 12px; border-radius: 8px; background: var(--panel); }
+    #chat { position: absolute; right: 12px; bottom: 44px; width: min(320px, calc(100vw - 100px)); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    #chatBox { width: 100%; display: none; flex-direction: column; gap: 6px; }
+    #chat.open #chatBox { display: flex; }
+    #chatLog { height: 180px; overflow-y: auto; font-size: 13px; line-height: 1.45; user-select: text; touch-action: pan-y; }
+    #chatLog .m b { color: var(--accent); }
+    #chatLog .m.sys { color: var(--muted); font-style: italic; }
+    #chatToggle { position: relative; }
+    #chatBadge { position: absolute; top: -6px; right: -6px; background: var(--red); border-radius: 999px; font-size: 11px; padding: 1px 6px; font-weight: 700; }
+
+    #conn { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: var(--red); color: #fff; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; z-index: 5; }
+
+    /* ---------- Hộp thoại ---------- */
+    #modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55); padding: 16px; z-index: 10; pointer-events: auto; }
+    #modal .card { text-align: center; }
+    #modal h2 { margin: 0 0 6px; font-size: 26px; }
+    #modal p { color: var(--muted); margin: 6px 0 16px; line-height: 1.5; }
+    #modal .stack { display: flex; flex-direction: column; gap: 10px; }
+    #modal .inviteLink { font-size: 13px; text-align: center; color: var(--accent); background: rgba(0,0,0,.35); cursor: text; user-select: text; -webkit-user-select: text; }
+    #modal .codeBig { font-size: 38px; letter-spacing: 8px; font-weight: 800; color: var(--accent); margin: 8px 0; user-select: text; }
+    #toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: rgba(10,18,14,.95); border: 1px solid var(--red); padding: 8px 16px; border-radius: 10px; font-size: 14px; z-index: 20; opacity: 0; pointer-events: none; transition: opacity .2s; }
+    #toast.show { opacity: 1; }
+    #toast.ok { border-color: var(--green); }
+
+    @media (max-width: 720px) {
+      .card { padding: 20px; }
+      #topbar { top: 6px; left: 6px; right: 6px; gap: 6px; }
+      .pcard { padding: 5px 8px; gap: 7px; }
+      .avatar { width: 30px; height: 30px; font-size: 13px; }
+      .pname { font-size: 13px; }
+      .mini { width: 13px; height: 13px; }
+      .mini span { width: 8px; height: 8px; line-height: 8px; font-size: 6px; }
+      #timer { font-size: 20px; min-width: 52px; }
+      #msgLine { bottom: 34px; font-size: 11px; }
+      #spin { width: 62px; height: 62px; }
+      #leftPanel { left: 6px; }
+      #viewSeg .btn { padding: 5px 7px; font-size: 11px; }
+      #power { right: 4px; }
+      #powerTrack { width: 28px; height: 40vh; }
+      #centerRow2 .btn.small { padding: 2px 6px; font-size: 11px; }
+      #chat { right: 6px; bottom: 36px; }
+      #hint { font-size: 11px; bottom: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gl" tabindex="0"></canvas>
+
+  <div id="lobby">
+    <div class="card">
+      <h1>Bi-a <span>3D</span> Online</h1>
+      <p class="sub">Pool 8 bi · 1 đấu 1 · bi trơn &amp; bi sọc · luật quốc tế</p>
+      <input id="nameInput" type="text" maxlength="20" placeholder="Tên của bạn" autocomplete="nickname" />
+      <div class="row">
+        <button class="btn primary" id="btnQuick">⚡ Ghép trận nhanh</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnCreate">Tạo phòng riêng</button>
+        <label class="check fixed"><input type="checkbox" id="chkPublic" /> Công khai</label>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <input id="codeInput" type="text" maxlength="5" placeholder="MÃ PHÒNG" autocomplete="off" />
+        <button class="btn fixed" id="btnJoin">Vào chơi</button>
+        <button class="btn fixed" id="btnWatch">Xem</button>
+      </div>
+      <div id="lobbyError"></div>
+      <div class="howto">
+        <b>Cách chơi:</b> di chuột trên bàn để ngắm · <b>nhấn giữ chuột trái, kéo ra xa rồi thả</b> để đánh ·
+        <b>chuột phải</b> để chọn điểm đánh · giữ con lăn để xoay camera · phím <b>1 2 3</b> đổi góc nhìn.
+      </div>
+    </div>
+  </div>
+
+  <div id="hud" hidden>
+    <div id="topbar">
+      <div class="pcard" id="p0"><div class="avatar">?</div><div class="info"><div class="pname"></div><div class="pgroup"></div><div class="tray"></div></div></div>
+      <div id="center">
+        <div id="centerRow">
+          <div id="timer">60</div>
+          <div class="seg" id="viewSeg">
+            <button class="btn on" data-view="angled" title="Góc 3D (phím 1)">3D</button>
+            <button class="btn" data-view="top" title="Nhìn từ trên (phím 2)">Trên cao</button>
+            <button class="btn" data-view="cue" title="Góc nhìn thứ nhất sau gậy (phím 3)">Sau gậy</button>
+          </div>
+        </div>
+        <div id="centerRow2">
+          <div id="roomTag" title="Bấm để sao chép liên kết mời"></div>
+          <button class="btn small" id="btnHelp" title="Cách đánh">❔</button>
+          <button class="btn small" id="btnQuality">⚙️</button>
+          <button class="btn small" id="btnMute" title="Bật/tắt âm thanh">🔊</button>
+          <button class="btn small" id="btnLeave">Thoát</button>
+        </div>
+      </div>
+      <div class="pcard right" id="p1"><div class="avatar">?</div><div class="info"><div class="pname"></div><div class="pgroup"></div><div class="tray"></div></div></div>
+    </div>
+    <div id="msgLine"></div>
+    <div id="banner"></div>
+    <div id="conn" hidden>Mất kết nối – đang kết nối lại…</div>
+
+    <div id="leftPanel">
+      <div class="box" id="spinBox">
+        <div id="spinWrap">
+          <div id="spin"><div id="spinDot"></div></div>
+          <div id="spinLabel">Điểm đánh<br><span id="spinText">Giữa bi</span></div>
+        </div>
+      </div>
+      <button class="btn small" id="btnReplace" hidden>Đặt lại bi cái</button>
+    </div>
+
+    <div class="box" id="power">
+      <div id="powerTitle">LỰC</div>
+      <div id="powerTrack"><div id="powerCover"></div><div id="powerHandle"></div></div>
+      <div id="powerVal">0%</div>
+    </div>
+
+
+    <div id="chat">
+      <div id="chatBox" class="box">
+        <div id="chatLog"></div>
+        <input id="chatInput" type="text" maxlength="200" placeholder="Nhắn tin…" />
+      </div>
+      <button class="btn small" id="chatToggle">💬 Chat<span id="chatBadge" hidden>0</span></button>
+    </div>
+
+    <div id="hint"></div>
+  </div>
+  <div id="pocketBtns"></div>
+  <div id="powerTip" hidden></div>
+  <div id="spinBig" hidden>
+    <div id="spinBigBall"><div id="spinBigDot"></div></div>
+    <div id="spinBigText">Giữa bi</div>
+  </div>
+  <div id="help" hidden>
+    <div class="card">
+      <h2>Cách đánh</h2>
+      <div class="steps">
+        <div class="step"><div class="ico">🎯</div><div><b>Ngắm</b><span>Di chuột trên bàn, gậy và đường ngắm đi theo. Chỉnh tinh bằng <kbd>←</kbd> <kbd>→</kbd> (giữ <kbd>Shift</kbd> để chậm hơn).</span></div></div>
+        <div class="step"><div class="ico">💪</div><div><b>Lấy lực và đánh</b><span><b style="display:inline;color:var(--accent)">Nhấn giữ chuột trái</b> ở bất kỳ đâu trên bàn → kéo chuột ra xa (càng xa càng mạnh) → <b style="display:inline;color:var(--accent)">thả ra để đánh</b>. Chuột phải hoặc <kbd>Esc</kbd> để huỷ. Hoặc giữ <kbd>Space</kbd> rồi thả.</span></div></div>
+        <div class="step"><div class="ico">🌀</div><div><b>Điểm đánh (xoáy)</b><span><b style="display:inline;color:var(--accent)">Giữ chuột phải + rê</b> để dời điểm đánh rồi thả (hoặc bấm nhanh chuột phải rồi bấm vào bi lớn). Trên = đuổi, dưới = giật, trái/phải = xoáy ngang. Phím <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>X</kbd> về giữa.</span></div></div>
+        <div class="step"><div class="ico">🎥</div><div><b>Camera</b><span>Giữ con lăn (chuột giữa) rồi kéo để xoay, lăn chuột để phóng to. Phím <kbd>1</kbd> 3D · <kbd>2</kbd> trên cao · <kbd>3</kbd> sau gậy (góc nhìn thứ nhất: rê chuột trái/phải để xoay cơ; <b style="display:inline;color:var(--accent)">lăn chuột</b> hoặc đưa chuột sát mép màn hình để xoay trọn 360°; sau khi đánh camera tự chuyển toàn cảnh rồi quay lại).</span></div></div>
+        <div class="step"><div class="ico">📱</div><div><b>Điện thoại</b><span>Kéo một ngón trên bàn để ngắm, kéo thanh lực bên phải xuống rồi thả để đánh.</span></div></div>
+      </div>
+      <button class="btn primary" id="btnHelpOk" style="width:100%">Đã hiểu</button>
+    </div>
+  </div>
+  <div id="modal" hidden></div>
+  <div id="toast"></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
