@@ -13,6 +13,21 @@ Mở hai tab (hoặc hai máy cùng mạng, dùng `http://<IP-máy>:5173`): mộ
 
 > Hai tab cùng một trình duyệt dùng chung `localStorage` nên sẽ bị coi là một người. Hãy dùng cửa sổ ẩn danh / trình duyệt khác cho người thứ hai.
 
+### Luyện tập với máy (1 người)
+
+Ở sảnh, mục **🤖 Luyện tập với máy**, chọn cấp độ: **Dễ**, **Vừa**, **Khó** hoặc **Cơ thủ chuyên nghiệp**. Máy ngồi ghế đối thủ, chơi đúng luật như người, không đếm giờ; bấm **Thoát** bất cứ lúc nào (không tính thua). Người khác vẫn có thể vào **Xem** bằng mã phòng (rê chuột lên nhãn "Luyện tập" để thấy mã).
+
+Máy chạy trên server (`shared/ai.ts`): tìm các cặp bi–lỗ theo hình học rồi đánh thử từng cú trên đúng engine vật lý + luật, chấm điểm theo kết quả và đánh cú tốt nhất kèm sai số tay:
+
+| Cấp | Cách chơi | Sai số ngắm |
+|---|---|---|
+| Dễ | Chọn một trong vài cú dễ nhất theo hình học, không đánh thử, lực ước lượng | ~1,7° |
+| Vừa | Đánh thử vài cú để chọn cú vào được, không tính vị trí | ~0,6° |
+| Khó | Bù độ "throw", thử đuổi/giật, chơi vị trí bi cái, đánh phòng thủ khi khó | ~0,25° |
+| Cơ thủ chuyên nghiệp | Thử thêm xoáy ngang và nhiều lực hơn, ưu tiên cú chắc ăn, phòng thủ kỹ | ~0,1° |
+
+Đo bằng `npx tsx scripts/ai-match.ts <cấp A> <cấp B> <số ván>`: mỗi cấp thắng cấp ngay dưới khoảng 7/8 ván; máy chuyên nghiệp vào ~0,8 bi mỗi cú, nghĩ trung bình ~1 giây.
+
 ### Production
 
 ```bash
@@ -70,7 +85,7 @@ Engine 2D có xoáy (trượt → lăn, xoáy trên/dưới/ngang), chạy giố
 ## Kiến trúc
 
 ```
-shared/     engine vật lý 2D có xoáy (physics.ts), luật chơi (game.ts), giao thức (protocol.ts)
+shared/     engine vật lý 2D có xoáy (physics.ts), luật chơi (game.ts), máy chơi (ai.ts), giao thức (protocol.ts)
 server/     Express + Socket.IO: phòng, lượt, đồng hồ, kết nối lại (hub.ts)
 client/     Vite + Three.js: bàn 3D, gậy, đường ngắm, HUD, âm thanh tổng hợp
 tests/      Vitest cho vật lý và luật
@@ -84,7 +99,8 @@ Mất kết nối: giữ chỗ 60 giây (client tự nối lại bằng token tr
 ## Kiểm thử
 
 ```bash
-npm test                              # 31 test vật lý + luật + năng lượng
+npm test                              # 34 test vật lý + luật + năng lượng + máy chơi
+npx tsx scripts/ai-match.ts pro hard 8  # máy đấu máy (không cần server) để so độ mạnh các cấp
 npm run typecheck
 npx tsx scripts/bot-match.ts 3        # 3 ván bot-vs-bot qua server đang chạy
 npx tsx scripts/speed-diag.ts 300     # đo tốc độ/năng lượng qua 300 cú đánh ngẫu nhiên

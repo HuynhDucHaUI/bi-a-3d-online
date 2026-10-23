@@ -34,7 +34,7 @@ export function connect(onReady: (room: RoomView | null) => void, onStatus: (onl
   return socket;
 }
 
-export function ask<T extends 'room:create' | 'room:join' | 'room:quick' | 'shot' | 'choice'>(
+export function ask<T extends 'room:create' | 'room:join' | 'room:quick' | 'room:practice' | 'shot' | 'choice'>(
   socket: ClientSocket, event: T, data: Parameters<ClientToServer[T]>[0],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   return new Promise((resolve) => {

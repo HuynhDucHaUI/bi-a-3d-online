@@ -1,4 +1,5 @@
 // Định nghĩa thông điệp giữa client và server.
+import type { AiLevel } from './ai';
 import type { Choice, GameView, Seat, ShotInput, ShotOutcome } from './game';
 
 export interface PlayerInfo {
@@ -18,6 +19,8 @@ export interface RoomView {
   scores: [number, number];
   rematch: [boolean, boolean];
   isPublic: boolean;
+  /** Phòng luyện tập với máy (máy ngồi ghế 1), null = phòng 2 người */
+  practice: AiLevel | null;
 }
 
 export interface AimMsg {
@@ -50,6 +53,7 @@ export interface ClientToServer {
   'room:create': (data: { name: string; isPublic: boolean }, ack: (r: Ack) => void) => void;
   'room:join': (data: { code: string; name: string; spectate?: boolean }, ack: (r: Ack) => void) => void;
   'room:quick': (data: { name: string }, ack: (r: Ack) => void) => void;
+  'room:practice': (data: { name: string; level: AiLevel }, ack: (r: Ack) => void) => void;
   'room:leave': () => void;
   aim: (data: AimMsg) => void;
   shot: (data: ShotInput, ack: (r: Ack) => void) => void;

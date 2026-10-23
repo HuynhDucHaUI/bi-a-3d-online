@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import { RECONNECT_SECONDS, TURN_SECONDS } from '../../shared/constants';
+import { AI_LEVEL_NAME, AI_LEVELS, AiLevel, planChoice, planShot } from '../../shared/ai';
 import { Choice, Game, RuleError, Seat, ShotInput } from '../../shared/game';
 import type { Ack, AimMsg, ClientToServer, RoomView, ServerToClient } from '../../shared/protocol';
 
@@ -16,6 +17,8 @@ interface Member {
   lastChatAt: number;
   lastAimAt: number;
   forfeitTimer?: NodeJS.Timeout;
+  /** máy chơi (chế độ luyện tập): không có kết nối nhưng luôn coi như đang online */
+  bot?: boolean;
 }
 
 interface Room {
@@ -31,7 +34,13 @@ interface Room {
   turnTimer?: NodeJS.Timeout;
   timeouts: [number, number];
   counted: boolean;
+  /** phòng luyện tập 1 người với máy (máy ngồi ghế BOT_SEAT, không đếm giờ) */
+  practice: AiLevel | null;
+  botTimer?: NodeJS.Timeout;
 }
+
+const BOT_SEAT: Seat = 1;
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -58,7 +67,7 @@ export class Hub {
     const need = (): Member | null => me;
 
     socket.on('hello', (data, ack) => {
-      const token = typeof data?.token === 'string' && this.members.has(data.token) ? data.token : randomUUID();
+      const token = typeof data?.token === 'string' && this.members.has(data.token) && !this.members.get(data.token)!.bot ? data.token : randomUUID();
       let m = this.members.get(token);
       if (!m) {
         m = { token, name: sanitizeName(data?.name), socketId: null, seat: null, roomCode: null, lastChatAt: 0, lastAimAt: 0 };
@@ -117,6 +126,25 @@ export class Hub {
       ack({ ok: true });
     });
 
+    socket.on('room:practice', (data, ack) => {
+      const m = need();
+      if (!m) return ack({ ok: false, error: 'Chưa kết nối.' });
+      const level = data?.level;
+      if (!AI_LEVELS.includes(level)) return ack({ ok: false, error: 'Cấp độ không hợp lệ.' });
+      m.name = sanitizeName(data?.name);
+      this.leave(m);
+      const room = this.createRoom(false);
+      room.practice = level;
+      const bot: Member = {
+        token: `bot:${room.code}`, name: `Máy (${AI_LEVEL_NAME[level]})`, socketId: null, seat: BOT_SEAT, roomCode: room.code,
+        lastChatAt: 0, lastAimAt: 0, bot: true,
+      };
+      this.members.set(bot.token, bot);
+      room.seats[BOT_SEAT] = bot.token;
+      this.enter(room, m, false, socket);
+      ack({ ok: true });
+    });
+
     socket.on('room:leave', () => { const m = need(); if (m) this.leave(m); });
 
     socket.on('aim', (data) => {
@@ -138,15 +166,7 @@ export class Hub {
       const room = m && m.roomCode ? this.rooms.get(m.roomCode) : undefined;
       if (!m || !room || !room.game || m.seat === null) return ack({ ok: false, error: 'Bạn không ở trong ván đấu.' });
       try {
-        const input = sanitizeShot(data);
-        const outcome = room.game.shoot(m.seat, input);
-        room.timeouts[m.seat] = 0;
-        if (process.env.BIA_LOG) console.log(`[${room.code}] ${m.name} (ghế ${m.seat}) lực ${input.params.power.toFixed(2)} → ${outcome.foul ?? 'ok'} | ${outcome.view.message}`);
-        const extra = Math.ceil(outcome.duration * 1000) + 2500;
-        this.afterGameChange(room, extra);
-        this.io.to(room.code).emit('shot:result', { outcome, remainingMs: this.remaining(room) ?? 0 });
-        // gửi kèm trạng thái phòng (tỉ số khi hết ván, cờ chơi lại...) — shot:result chỉ có trạng thái ván
-        this.broadcast(room);
+        this.playShot(room, m.seat, sanitizeShot(data));
         ack({ ok: true });
       } catch (e) {
         if (e instanceof RuleError) return ack({ ok: false, error: e.message });
@@ -218,7 +238,7 @@ export class Hub {
     } while (this.rooms.has(code));
     const room: Room = {
       code, isPublic, seats: [null, null], members: new Set(), game: null, scores: [0, 0], rematch: [false, false],
-      nextBreaker: Math.random() < 0.5 ? 0 : 1, deadlineAt: null, timeouts: [0, 0], counted: false,
+      nextBreaker: Math.random() < 0.5 ? 0 : 1, deadlineAt: null, timeouts: [0, 0], counted: false, practice: null,
     };
     this.rooms.set(code, room);
     return room;
@@ -263,7 +283,9 @@ export class Hub {
 
   private removeRoom(room: Room): void {
     if (room.turnTimer) clearTimeout(room.turnTimer);
+    if (room.botTimer) clearTimeout(room.botTimer);
     for (const t of room.members) { const mm = this.members.get(t); if (mm) { mm.roomCode = null; mm.seat = null; } }
+    for (const t of room.seats) if (t && this.members.get(t)?.bot) this.members.delete(t);
     this.rooms.delete(room.code);
   }
 
@@ -281,6 +303,7 @@ export class Hub {
     if (room.turnTimer) clearTimeout(room.turnTimer);
     room.turnTimer = undefined;
     const g = room.game;
+    if (room.practice) { room.deadlineAt = null; this.scheduleBot(room, extraMs); return; }
     if (!g || g.phase === 'over') { room.deadlineAt = null; return; }
     const ms = extraMs + TURN_SECONDS * 1000;
     room.deadlineAt = Date.now() + ms;
@@ -309,6 +332,84 @@ export class Hub {
     this.armTimer(room, extraMs);
   }
 
+  /** Thực hiện cú đánh (của người hoặc máy) rồi phát kết quả cho cả phòng. Luật từ chối thì ném RuleError. */
+  private playShot(room: Room, seat: Seat, input: ShotInput): void {
+    const outcome = room.game!.shoot(seat, input);
+    room.timeouts[seat] = 0;
+    if (process.env.BIA_LOG) console.log(`[${room.code}] ${this.nameOfSeat(room, seat)} (ghế ${seat}) lực ${input.params.power.toFixed(2)} → ${outcome.foul ?? 'ok'} | ${outcome.view.message}`);
+    const extra = Math.ceil(outcome.duration * 1000) + 2500;
+    this.afterGameChange(room, extra);
+    this.io.to(room.code).emit('shot:result', { outcome, remainingMs: this.remaining(room) ?? 0 });
+    // gửi kèm trạng thái phòng (tỉ số khi hết ván, cờ chơi lại...) — shot:result chỉ có trạng thái ván
+    this.broadcast(room);
+  }
+
+  // ---------- máy chơi (luyện tập) ----------
+  /** Đến lượt máy thì hẹn giờ cho máy đi (đợi người chơi xem xong cú vừa đánh). Hết ván thì máy luôn sẵn sàng chơi lại. */
+  private scheduleBot(room: Room, delayMs: number): void {
+    if (room.botTimer) clearTimeout(room.botTimer);
+    room.botTimer = undefined;
+    const g = room.game;
+    if (!g) return;
+    if (g.phase === 'over') { room.rematch[BOT_SEAT] = true; return; }
+    if (g.turn !== BOT_SEAT) return;
+    const seq = g.seq;
+    room.botTimer = setTimeout(() => void this.botMove(room, seq), delayMs + 700);
+  }
+
+  private async botMove(room: Room, seq: number): Promise<void> {
+    room.botTimer = undefined;
+    const alive = () => this.rooms.get(room.code) === room && room.game?.seq === seq;
+    const g = room.game;
+    const level = room.practice;
+    if (!g || !level || !alive()) return;
+    try {
+      if (g.phase === 'choice') {
+        g.choose(BOT_SEAT, planChoice());
+        this.afterGameChange(room, 0);
+        this.broadcast(room);
+        return;
+      }
+      // máy đánh thử hàng trăm cú: nhường luồng xử lý giữa chừng để các phòng khác không bị khựng
+      const input = await planShot(g.view(), BOT_SEAT, level, { pause: () => new Promise((r) => setImmediate(r)) });
+      if (!(await this.botAim(room, input, alive))) return;
+      this.playShot(room, BOT_SEAT, input);
+    } catch (e) {
+      console.error('bot error', e);
+      // không để ván bị treo: tính như máy hết giờ (người chơi được đặt bi tự do)
+      if (alive()) { g.timeout(BOT_SEAT); this.afterGameChange(room, 0); this.broadcast(room); }
+    }
+  }
+
+  /** Cho người chơi xem máy ngắm: xoay cơ dần về hướng đánh, kéo lực rồi mới đánh. */
+  private async botAim(room: Room, input: ShotInput, alive: () => boolean): Promise<boolean> {
+    const g = room.game!;
+    const p = input.params;
+    const cue = input.cuePos ?? g.balls[0];
+    const end = Math.atan2(p.dy, p.dx);
+    const swing = (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.35);
+    const send = (a: number, power: number) => {
+      const msg: AimMsg = { dx: Math.cos(a), dy: Math.sin(a), power, spinX: p.spinX, spinY: p.spinY };
+      if (g.inHand !== 'none') { msg.cx = cue.x; msg.cy = cue.y; }
+      if (input.calledPocket !== undefined) msg.calledPocket = input.calledPocket;
+      this.io.to(room.code).emit('aim', msg);
+    };
+    const STEP_MS = 60;
+    for (let i = 0; i <= 18; i++) {
+      if (!alive()) return false;
+      send(end + swing * (1 - i / 18) ** 3, 0);
+      await wait(STEP_MS);
+    }
+    await wait(300);
+    for (let i = 1; i <= 10; i++) {
+      if (!alive()) return false;
+      send(end, (p.power * i) / 10);
+      await wait(STEP_MS);
+    }
+    await wait(150);
+    return alive();
+  }
+
   private nameOfSeat(room: Room, seat: Seat): string {
     const t = room.seats[seat];
     return (t && this.members.get(t)?.name) || `Người chơi ${seat + 1}`;
@@ -318,7 +419,7 @@ export class Hub {
   private viewFor(room: Room, m: Member): RoomView {
     const info = (t: string | null) => {
       const mm = t ? this.members.get(t) : undefined;
-      return mm ? { name: mm.name, connected: mm.socketId !== null } : null;
+      return mm ? { name: mm.name, connected: mm.socketId !== null || !!mm.bot } : null;
     };
     return {
       code: room.code,
@@ -330,6 +431,7 @@ export class Hub {
       scores: [room.scores[0], room.scores[1]],
       rematch: [room.rematch[0], room.rematch[1]],
       isPublic: room.isPublic,
+      practice: room.practice,
     };
   }
 

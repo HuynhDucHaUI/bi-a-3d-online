@@ -37,7 +37,7 @@ function validName(name: string): string | null {
   return name;
 }
 
-async function enter(event: 'room:create' | 'room:join' | 'room:quick', data: any): Promise<void> {
+async function enter(event: 'room:create' | 'room:join' | 'room:quick' | 'room:practice', data: any): Promise<void> {
   ui.lobbyBusy(true);
   ui.clearChat();
   const r = await ask(socket, event, data);
@@ -51,6 +51,7 @@ async function enter(event: 'room:create' | 'room:join' | 'room:quick', data: an
 ui.init({
   quick: (n) => { const name = validName(n); if (name) void enter('room:quick', { name }); },
   create: (n, isPublic) => { const name = validName(n); if (name) void enter('room:create', { name, isPublic }); },
+  practice: (n, level) => { const name = validName(n); if (name) void enter('room:practice', { name, level }); },
   join: (n, code, spectate) => {
     const name = validName(n);
     if (!name) return;

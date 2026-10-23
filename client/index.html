@@ -52,6 +52,11 @@
     .howto { margin-top: 16px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
     .howto b { color: var(--text); }
     #codeInput { text-transform: uppercase; letter-spacing: 4px; text-align: center; font-weight: 700; }
+    .practiceTitle { font-weight: 700; font-size: 14px; }
+    .practiceTitle span { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+    #levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    #levels .btn { padding: 9px 8px; }
+    #levels .btn[data-level="pro"] { grid-column: 1 / -1; border-color: rgba(242,193,78,.5); color: var(--accent); }
 
     /* ---------- HUD ---------- */
     #hud { position: fixed; inset: 0; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
@@ -200,6 +205,14 @@
         <input id="codeInput" type="text" maxlength="5" placeholder="MÃ PHÒNG" autocomplete="off" />
         <button class="btn fixed" id="btnJoin">Vào chơi</button>
         <button class="btn fixed" id="btnWatch">Xem</button>
+      </div>
+      <div class="divider"></div>
+      <div class="practiceTitle">🤖 Luyện tập với máy <span>· 1 người, không đếm giờ</span></div>
+      <div id="levels">
+        <button class="btn" data-level="easy">Dễ</button>
+        <button class="btn" data-level="medium">Vừa</button>
+        <button class="btn" data-level="hard">Khó</button>
+        <button class="btn" data-level="pro">Cơ thủ chuyên nghiệp</button>
       </div>
       <div id="lobbyError"></div>
       <div class="howto">

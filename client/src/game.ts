@@ -385,8 +385,8 @@ export class GameClient {
     let hint = '';
     if (!room.seats[0] || !room.seats[1] || g.phase === 'over' || this.busy) hint = '';
     else if (room.you === null) hint = 'Bạn đang xem trận đấu';
-    else if (g.phase === 'choice') hint = g.turn === room.you ? '' : 'Đối thủ đang chọn…';
-    else if (g.turn !== room.you) hint = 'Đối thủ đang ngắm…';
+    else if (g.phase === 'choice') hint = g.turn === room.you ? '' : room.practice ? '🤖 Máy đang chọn…' : 'Đối thủ đang chọn…';
+    else if (g.turn !== room.you) hint = room.practice ? (this.remote ? '🤖 Máy đang ngắm…' : '🤖 Máy đang tính cú đánh…') : 'Đối thủ đang ngắm…';
     else if (this.placing) hint = g.inHand === 'kitchen' ? '👆 Bấm để đặt bi cái phía sau vạch trắng' : '👆 Bấm để đặt bi cái ở bất kỳ đâu';
     else if (g.onEight && this.called === null) hint = '🎯 Bấm vào lỗ bạn muốn đánh bi số 8 vào';
     else if (this.spinDrag) hint = 'Rê chuột để dời điểm đánh · thả chuột phải là xong';

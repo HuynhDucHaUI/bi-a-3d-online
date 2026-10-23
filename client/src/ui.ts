@@ -1,4 +1,5 @@
 // Giao diện DOM: sảnh, HUD, hộp thoại, chat.
+import { AI_LEVEL_NAME, AiLevel } from '@shared/ai';
 import type { Choice, GameView, Group } from '@shared/game';
 import type { ChatMsg, RoomView } from '@shared/protocol';
 import { BALL_COLORS } from './render/textures';
@@ -8,6 +9,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getEl
 export interface UiHandlers {
   quick(name: string): void;
   create(name: string, isPublic: boolean): void;
+  practice(name: string, level: AiLevel): void;
   join(name: string, code: string, spectate: boolean): void;
   leave(): void;
   view(mode: 'angled' | 'top' | 'cue'): void;
@@ -35,6 +37,8 @@ export class Ui {
   private unread = 0;
   private hintText = '';
   private timerText = '';
+  /** đang luyện tập với máy (không có mã mời) */
+  private practice = false;
 
   init(h: UiHandlers): void {
     this.h = h;
@@ -45,6 +49,9 @@ export class Ui {
     $('btnCreate').onclick = () => h.create(getName(), $<HTMLInputElement>('chkPublic').checked);
     $('btnJoin').onclick = () => h.join(getName(), code.value, false);
     $('btnWatch').onclick = () => h.join(getName(), code.value, true);
+    document.querySelectorAll<HTMLButtonElement>('#levels .btn').forEach((b) => {
+      b.onclick = () => h.practice(getName(), b.dataset.level as AiLevel);
+    });
     code.addEventListener('keydown', (e) => { if (e.key === 'Enter') h.join(getName(), code.value, false); });
     $('btnLeave').onclick = () => {
       // bấm nhầm "Đầu hàng" là thua ván ngay: hỏi lại cho chắc
@@ -53,7 +60,7 @@ export class Ui {
     };
     $('btnReplace').onclick = () => h.replace();
     $('btnMute').onclick = () => { $('btnMute').textContent = h.mute() ? '🔇' : '🔊'; };
-    $('roomTag').onclick = () => this.copyInvite();
+    $('roomTag').onclick = () => { if (!this.practice) this.copyInvite(); };
     // Nút trong HUD không giữ tiêu điểm bàn phím sau khi bấm: nếu giữ, nhấn Enter/Space lúc chơi
     // sẽ "bấm lại" nút đó (vd. vừa đóng chat lại tự mở ra).
     $('hud').addEventListener('click', (e) => {
@@ -172,6 +179,7 @@ export class Ui {
 
   lobbyBusy(b: boolean): void {
     for (const id of ['btnQuick', 'btnCreate', 'btnJoin', 'btnWatch']) $<HTMLButtonElement>(id).disabled = b;
+    document.querySelectorAll<HTMLButtonElement>('#levels .btn').forEach((el) => { el.disabled = b; });
   }
 
   setOnline(online: boolean): void {
@@ -315,11 +323,15 @@ export class Ui {
   sync(room: RoomView, finished: boolean): void {
     this.showHud();
     const g = room.game;
-    $('roomTag').textContent = `Phòng ${room.code}${room.spectators ? ` · ${room.spectators} người xem` : ''}`;
+    this.practice = !!room.practice;
+    const watchers = room.spectators ? ` · ${room.spectators} người xem` : '';
+    $('roomTag').textContent = room.practice ? `🤖 Luyện tập · ${AI_LEVEL_NAME[room.practice]}${watchers}` : `Phòng ${room.code}${watchers}`;
+    $('roomTag').title = room.practice ? `Mã phòng ${room.code} (người khác có thể vào xem)` : 'Bấm để sao chép liên kết mời';
     for (const i of [0, 1] as const) this.renderPlayer(room, i);
     $('msgLine').textContent = g ? g.message : 'Đang chờ đối thủ…';
     $('msgLine').hidden = !g;
-    $('btnLeave').textContent = room.you === null ? 'Thoát' : g && g.phase !== 'over' && room.seats[0] && room.seats[1] ? 'Đầu hàng' : 'Thoát';
+    // luyện tập: thoát là xong, không tính thua nên không cần hỏi "Đầu hàng"
+    $('btnLeave').textContent = room.you === null || room.practice ? 'Thoát' : g && g.phase !== 'over' && room.seats[0] && room.seats[1] ? 'Đầu hàng' : 'Thoát';
     this.renderModal(room, finished);
   }
 
@@ -330,7 +342,8 @@ export class Ui {
     const active = !!g && g.phase !== 'over' && g.turn === i && !!room.seats[0] && !!room.seats[1];
     el.classList.toggle('active', active);
     el.classList.toggle('off', !p || !p.connected);
-    (el.querySelector('.avatar') as HTMLElement).textContent = p ? p.name.slice(0, 1).toUpperCase() : '?';
+    const bot = !!room.practice && i === 1;
+    (el.querySelector('.avatar') as HTMLElement).textContent = bot ? '🤖' : p ? p.name.slice(0, 1).toUpperCase() : '?';
     const nm = el.querySelector('.pname') as HTMLElement;
     nm.innerHTML = '';
     nm.append(p ? p.name + (room.you === i ? ' (bạn)' : '') + (p.connected ? '' : ' · mất kết nối') : 'Đang chờ…');

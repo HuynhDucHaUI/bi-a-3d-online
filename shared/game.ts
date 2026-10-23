@@ -131,6 +131,20 @@ export class Game {
     this.message = 'Lượt phá bi';
   }
 
+  /** Dựng lại ván từ trạng thái đã gửi đi (máy dùng để đánh thử các cú trước khi chọn). */
+  static fromView(v: GameView, rng: () => number = Math.random): Game {
+    const g = new Game(v.breaker, rng);
+    g.balls = v.balls.map((b) => ({ ...b }));
+    g.turn = v.turn;
+    g.groups = [v.groups[0], v.groups[1]];
+    g.phase = v.phase;
+    g.inHand = v.inHand;
+    g.winner = v.winner;
+    g.message = v.message;
+    g.seq = v.seq;
+    return g;
+  }
+
   view(): GameView {
     return {
       balls: this.balls.map((b) => ({ ...b })),
